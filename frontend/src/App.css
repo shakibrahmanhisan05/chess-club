@@ -1,34 +1,134 @@
-.App-logo {
-    height: 40vmin;
+/* App-specific styles */
+.hero-gradient {
+    background: radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.15) 0%, transparent 50%);
+}
+
+.card-hover {
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-4px);
+    border-color: rgba(124, 58, 237, 0.5);
+}
+
+/* Chess piece animations */
+.chess-piece {
+    font-size: 4rem;
+    filter: drop-shadow(0 0 10px rgba(124, 58, 237, 0.5));
+}
+
+/* Rank badge styles */
+.rank-badge {
+    font-family: 'Unbounded', sans-serif;
+    font-weight: 700;
+}
+
+.rank-1 {
+    background: linear-gradient(135deg, #ffd700, #ffb800);
+    color: #000;
+}
+
+.rank-2 {
+    background: linear-gradient(135deg, #c0c0c0, #a8a8a8);
+    color: #000;
+}
+
+.rank-3 {
+    background: linear-gradient(135deg, #cd7f32, #b8860b);
+    color: #000;
+}
+
+/* Leaderboard table */
+.leaderboard-row {
+    transition: background 0.2s ease;
+}
+
+.leaderboard-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Stats cards */
+.stat-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, transparent 60%, rgba(124, 58, 237, 0.1) 100%);
     pointer-events: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Loading skeleton */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 25%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0.05) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
-.App-link {
-    color: #61dafb;
+/* Navigation active state */
+.nav-link-active {
+    color: #7C3AED;
+    position: relative;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.nav-link-active::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: #7C3AED;
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.5);
 }
+
+/* Form inputs */
+.input-glow:focus {
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3);
+}
+
+/* Tournament bracket lines */
+.bracket-line {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* News card image overlay */
+.news-card-overlay {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+}
+
+/* Mobile menu animation */
+.mobile-menu-enter {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+
+.mobile-menu-enter-active {
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* Staggered animation helper */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
