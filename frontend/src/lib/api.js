@@ -1,236 +1,117 @@
-const API_BASE = process.env.REACT_APP_BACKEND_URL + '/api';
+// frontend/src/lib/api.js
+// Robust single-read fetch helper + API helpers used across the app.
+// Reads the response body exactly once (via res.text()) then parses JSON if possible.
+// This prevents "body stream already read" errors.
+
+const API_BASE = (process.env.REACT_APP_BACKEND_URL || '') + '/api';
+
+async function parseResponseOnce(res) {
+  const text = await res.text(); // read the stream exactly once
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (e) {
+    data = text; // not JSON, return raw text
+  }
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function request(url, options = {}) {
+  const res = await fetch(url, options);
+  const { ok, status, data } = await parseResponseOnce(res);
+
+  if (!ok) {
+    const msg = data && (data.message || data.error || data.detail) ? (data.message || data.error || data.detail) : `Request failed (${status})`;
+    const err = new Error(msg);
+    err.status = status;
+    err.payload = data;
+    throw err;
+  }
+
+  return data;
+}
 
 export const api = {
-  // Helper for authenticated requests
+  // auth headers builder
   authHeaders: (token) => ({
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
+    Authorization: `Bearer ${token}`
   }),
 
   // Public endpoints
-  async getMembers() {
-    const res = await fetch(`${API_BASE}/members`);
-    if (!res.ok) throw new Error('Failed to fetch members');
-    return res.json();
-  },
-
-  async getMember(id) {
-    const res = await fetch(`${API_BASE}/members/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch member');
-    return res.json();
-  },
-
-  async getLeaderboard(timeControl = 'rapid') {
-    const res = await fetch(`${API_BASE}/leaderboard?time_control=${timeControl}`);
-    if (!res.ok) throw new Error('Failed to fetch leaderboard');
-    return res.json();
-  },
-
-  async getChessComStats(username) {
-    const res = await fetch(`${API_BASE}/chess-com/${username}`);
-    if (!res.ok) throw new Error('Failed to fetch Chess.com stats');
-    return res.json();
-  },
-
-  async getTournaments() {
-    const res = await fetch(`${API_BASE}/tournaments`);
-    if (!res.ok) throw new Error('Failed to fetch tournaments');
-    return res.json();
-  },
-
-  async getTournament(id) {
-    const res = await fetch(`${API_BASE}/tournaments/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch tournament');
-    return res.json();
-  },
-
-  async getMatches() {
-    const res = await fetch(`${API_BASE}/matches`);
-    if (!res.ok) throw new Error('Failed to fetch matches');
-    return res.json();
-  },
-
-  async getNews() {
-    const res = await fetch(`${API_BASE}/news`);
-    if (!res.ok) throw new Error('Failed to fetch news');
-    return res.json();
-  },
-
-  async getNewsItem(id) {
-    const res = await fetch(`${API_BASE}/news/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch news item');
-    return res.json();
-  },
+  getMembers: () => request(`${API_BASE}/members`),
+  getMember: (id) => request(`${API_BASE}/members/${id}`),
+  getLeaderboard: (timeControl = 'rapid') => request(`${API_BASE}/leaderboard?time_control=${timeControl}`),
+  getChessComStats: (username) => request(`${API_BASE}/chess-com/${username}`),
+  getTournaments: () => request(`${API_BASE}/tournaments`),
+  getTournament: (id) => request(`${API_BASE}/tournaments/${id}`),
+  getMatches: () => request(`${API_BASE}/matches`),
+  getNews: () => request(`${API_BASE}/news`),
+  getNewsItem: (id) => request(`${API_BASE}/news/${id}`),
 
   // Auth endpoints
-  async login(username, password) {
-    const res = await fetch(`${API_BASE}/admin/login`, {
+  // login(username, password) returns whatever backend returns (expected: { token, admin })
+  login: (username, password) =>
+    request(`${API_BASE}/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Login failed');
-    }
-    return res.json();
-  },
+    }),
 
-  async register(username, password, email) {
-    const res = await fetch(`${API_BASE}/admin/register`, {
+  register: (username, password, email) =>
+    request(`${API_BASE}/admin/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, email })
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Registration failed');
-    }
-    return res.json();
-  },
+    }),
 
-  // Admin endpoints
-  async getAdminStats(token) {
-    const res = await fetch(`${API_BASE}/admin/stats`, {
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to fetch stats');
-    return res.json();
-  },
+  // Admin endpoints (require token)
+  getAdminStats: (token) => request(`${API_BASE}/admin/stats`, { headers: api.authHeaders(token) }),
 
-  async createMember(token, data) {
-    const res = await fetch(`${API_BASE}/admin/members`, {
-      method: 'POST',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to create member');
-    }
-    return res.json();
-  },
+  // Members (admin)
+  createMember: (token, payload) => request(`${API_BASE}/admin/members`, {
+    method: 'POST', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  updateMember: (token, id, payload) => request(`${API_BASE}/admin/members/${id}`, {
+    method: 'PUT', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  deleteMember: (token, id) => request(`${API_BASE}/admin/members/${id}`, {
+    method: 'DELETE', headers: api.authHeaders(token)
+  }),
 
-  async updateMember(token, id, data) {
-    const res = await fetch(`${API_BASE}/admin/members/${id}`, {
-      method: 'PUT',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to update member');
-    }
-    return res.json();
-  },
+  // Refresh ratings
+  refreshRatings: (token) => request(`${API_BASE}/admin/members/refresh-ratings`, {
+    method: 'POST', headers: api.authHeaders(token)
+  }),
 
-  async deleteMember(token, id) {
-    const res = await fetch(`${API_BASE}/admin/members/${id}`, {
-      method: 'DELETE',
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to delete member');
-    return res.json();
-  },
+  // Matches (admin)
+  createMatch: (token, payload) => request(`${API_BASE}/admin/matches`, {
+    method: 'POST', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  deleteMatch: (token, id) => request(`${API_BASE}/admin/matches/${id}`, {
+    method: 'DELETE', headers: api.authHeaders(token)
+  }),
 
-  async refreshRatings(token) {
-    const res = await fetch(`${API_BASE}/admin/members/refresh-ratings`, {
-      method: 'POST',
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to refresh ratings');
-    return res.json();
-  },
+  // Tournaments (admin)
+  createTournament: (token, payload) => request(`${API_BASE}/admin/tournaments`, {
+    method: 'POST', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  updateTournament: (token, id, payload) => request(`${API_BASE}/admin/tournaments/${id}`, {
+    method: 'PUT', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  deleteTournament: (token, id) => request(`${API_BASE}/admin/tournaments/${id}`, {
+    method: 'DELETE', headers: api.authHeaders(token)
+  }),
 
-  async createMatch(token, data) {
-    const res = await fetch(`${API_BASE}/admin/matches`, {
-      method: 'POST',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to create match');
-    }
-    return res.json();
-  },
-
-  async deleteMatch(token, id) {
-    const res = await fetch(`${API_BASE}/admin/matches/${id}`, {
-      method: 'DELETE',
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to delete match');
-    return res.json();
-  },
-
-  async createTournament(token, data) {
-    const res = await fetch(`${API_BASE}/admin/tournaments`, {
-      method: 'POST',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to create tournament');
-    }
-    return res.json();
-  },
-
-  async updateTournament(token, id, data) {
-    const res = await fetch(`${API_BASE}/admin/tournaments/${id}`, {
-      method: 'PUT',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to update tournament');
-    }
-    return res.json();
-  },
-
-  async deleteTournament(token, id) {
-    const res = await fetch(`${API_BASE}/admin/tournaments/${id}`, {
-      method: 'DELETE',
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to delete tournament');
-    return res.json();
-  },
-
-  async createNews(token, data) {
-    const res = await fetch(`${API_BASE}/admin/news`, {
-      method: 'POST',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to create news');
-    }
-    return res.json();
-  },
-
-  async updateNews(token, id, data) {
-    const res = await fetch(`${API_BASE}/admin/news/${id}`, {
-      method: 'PUT',
-      headers: this.authHeaders(token),
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to update news');
-    }
-    return res.json();
-  },
-
-  async deleteNews(token, id) {
-    const res = await fetch(`${API_BASE}/admin/news/${id}`, {
-      method: 'DELETE',
-      headers: this.authHeaders(token)
-    });
-    if (!res.ok) throw new Error('Failed to delete news');
-    return res.json();
-  }
+  // News (admin)
+  createNews: (token, payload) => request(`${API_BASE}/admin/news`, {
+    method: 'POST', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  updateNews: (token, id, payload) => request(`${API_BASE}/admin/news/${id}`, {
+    method: 'PUT', headers: api.authHeaders(token), body: JSON.stringify(payload)
+  }),
+  deleteNews: (token, id) => request(`${API_BASE}/admin/news/${id}`, {
+    method: 'DELETE', headers: api.authHeaders(token)
+  })
 };
+
