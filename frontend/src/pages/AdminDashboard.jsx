@@ -54,7 +54,7 @@ export default function AdminDashboard() {
       navigate('/admin/login');
     }
   }, [isAuthenticated, isLoading, navigate]);
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (token) {
       fetchAllData();
