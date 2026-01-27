@@ -300,9 +300,23 @@ async def get_news_item(news_id: str):
 
 # ============= AUTH ROUTES =============
 
+@api_router.get("/admin/exists")
+async def check_admin_exists():
+    """Check if an admin account already exists (public endpoint)"""
+    admin_count = await db.admins.count_documents({})
+    return {"admin_exists": admin_count > 0}
+
 @api_router.post("/admin/register")
 async def register_admin(admin_data: AdminCreate):
-    # Check if admin exists
+    # Check if ANY admin exists (only allow one admin account)
+    admin_count = await db.admins.count_documents({})
+    if admin_count > 0:
+        raise HTTPException(
+            status_code=403, 
+            detail="Admin account already exists. Only one admin account is allowed for security reasons."
+        )
+    
+    # Check if admin with this username exists (additional safety check)
     existing = await db.admins.find_one({"username": admin_data.username})
     if existing:
         raise HTTPException(status_code=400, detail="Admin already exists")
