@@ -1,0 +1,177 @@
+{
+  "identity": {
+    "persona": "E1 - The Anti-AI Designer",
+    "principles": [
+      "Fusion over Imitation: Mix esports aggression with university prestige.",
+      "Emotion First: Every interaction should feel 'strategic' and 'intellectual' yet 'competitive'.",
+      "Content is King: Data (Elo, Rankings) is the hero. Visualize it beautifully.",
+      "Negative Space: Don't clutter. Let the rankings breathe.",
+      "Contrast: High contrast for readability in dark mode."
+    ],
+    "anti_patterns": [
+      "No generic 'SaaS Blue'.",
+      "No centered text blocks without purpose.",
+      "No flat, boring tables. Use glassmorphism for data.",
+      "No 'Inter' for headings."
+    ]
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Unbounded, sans-serif",
+      "weights": ["700", "900"],
+      "usage": "Hero titles, Section headers, Rank numbers",
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["400", "500", "600"],
+      "usage": "Paragraphs, UI elements, Data cells"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace",
+      "usage": "Elo ratings, Timers, Code snippets"
+    }
+  },
+  "colors": {
+    "theme": "dark",
+    "palette": {
+      "background": {
+        "default": "#050505",
+        "paper": "#0A0A0A",
+        "subtle": "#121212"
+      },
+      "primary": {
+        "main": "#7C3AED",
+        "light": "#A78BFA",
+        "dark": "#5B21B6",
+        "glow": "0 0 20px rgba(124, 58, 237, 0.5)"
+      },
+      "secondary": {
+        "main": "#06B6D4",
+        "light": "#67E8F9",
+        "dark": "#0891B2"
+      },
+      "accent": {
+        "main": "#D946EF",
+        "warning": "#F59E0B",
+        "success": "#10B981",
+        "error": "#EF4444"
+      },
+      "neutral": {
+        "100": "#F3F4F6",
+        "200": "#E5E7EB",
+        "300": "#D1D5DB",
+        "400": "#9CA3AF",
+        "500": "#6B7280",
+        "600": "#4B5563",
+        "700": "#374151",
+        "800": "#1F2937",
+        "900": "#111827"
+      }
+    },
+    "gradients": {
+      "hero": "linear-gradient(135deg, #050505 0%, #1a1a1a 100%)",
+      "glass": "linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)",
+      "glow_border": "linear-gradient(90deg, #7C3AED, #06B6D4, #7C3AED)"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "backdrop_filter": "blur(12px)",
+      "background": "rgba(255, 255, 255, 0.03)",
+      "border": "1px solid rgba(255, 255, 255, 0.1)",
+      "shadow": "0 8px 32px 0 rgba(0, 0, 0, 0.37)"
+    },
+    "borders": {
+      "tracing_beam": "Use framer-motion to animate a gradient border around active tournament cards.",
+      "subtle": "1px solid #27272a"
+    },
+    "texture": {
+      "noise": "Overlay a subtle noise texture (opacity 0.03) on the main background to reduce digital flatness."
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid (CSS Grid)",
+    "spacing": {
+      "container_padding": "p-6 md:p-12",
+      "section_gap": "gap-8 md:gap-16",
+      "element_gap": "gap-4"
+    },
+    "containers": {
+      "max_width": "max-w-7xl",
+      "alignment": "mx-auto"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-white rounded-full px-8 py-3 font-bold hover:shadow-[0_0_20px_rgba(124,58,237,0.4)] transition-all duration-300",
+      "secondary": "bg-transparent border border-white/20 text-white rounded-full px-8 py-3 hover:bg-white/5 transition-all"
+    },
+    "cards": {
+      "style": "glassmorphism",
+      "hover": "hover:border-primary/50 hover:translate-y-[-4px] transition-all duration-300"
+    },
+    "tables": {
+      "header": "text-xs uppercase tracking-widest text-neutral-400 border-b border-white/10 pb-4",
+      "row": "hover:bg-white/5 transition-colors border-b border-white/5"
+    }
+  },
+  "motion": {
+    "library": "framer-motion",
+    "transitions": {
+      "default": { "duration": 0.4, "ease": [0.22, 1, 0.36, 1] },
+      "stagger": 0.1
+    },
+    "animations": {
+      "fade_up": {
+        "initial": { "opacity": 0, "y": 20 },
+        "animate": { "opacity": 1, "y": 0 }
+      },
+      "scale_in": {
+        "initial": { "opacity": 0, "scale": 0.9 },
+        "animate": { "opacity": 1, "scale": 1 }
+      }
+    }
+  },
+  "media": {
+    "image_urls": {
+      "hero_bg": "https://images.unsplash.com/photo-1767972159445-ae8732f0a3a3?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "tournament_feature": "https://images.unsplash.com/photo-1632679090212-612ac1f4d76f?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "club_life": "https://images.pexels.com/photos/8466014/pexels-photo-8466014.jpeg",
+      "developer_profile": "https://customer-assets.emergentagent.com/job_chess-hub-5/artifacts/xkj2z8bb_IMG_20251109_211735~2.jpg",
+      "chess_piece_dramatic": "https://images.unsplash.com/photo-1762868699874-00262185c54b?crop=entropy&cs=srgb&fm=jpg&q=85"
+    },
+    "icons": "lucide-react"
+  },
+  "3d_libraries": {
+    "primary": "react-three-fiber",
+    "helpers": "@react-three/drei",
+    "usage": "Hero section: Floating, interactive 3D chess King/Queen. Use <Float> and <Environment> for realism."
+  },
+  "instructions_to_main_agent": [
+    "1. Install 'framer-motion', 'lucide-react', 'clsx', 'tailwind-merge' immediately.",
+    "2. Install '@react-three/fiber' and '@react-three/drei' for the hero section.",
+    "3. Create a 'Layout' component that wraps the app with the dark theme and noise texture.",
+    "4. Use the 'Unbounded' font from Google Fonts. Add it to index.html or import in CSS.",
+    "5. Implement the 'Bento Grid' for the dashboard and home page.",
+    "6. Ensure all interactive elements have 'data-testid'.",
+    "7. Use 'sonner' for notifications.",
+    "8. STRICTLY follow the color palette. Do not introduce random colors."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all.",
+    "You MUST NOT center align the app container.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations.",
+    "NEVER use AI assistant Emoji characters.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Subtle grain textures, noise overlays, custom cursors.",
+    "Prioritize using pre-existing components from src/components/ui.",
+    "Components MUST use named exports.",
+    "Pages MUST use default exports."
+  ]
+}
