@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -54,39 +54,41 @@ export default function AdminDashboard() {
       navigate('/admin/login');
     }
   }, [isAuthenticated, isLoading, navigate]);
-// eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (token) {
-      fetchAllData();
-    }
-  }, [token]);
+useEffect(() => {
+  if (token) {
+    fetchAllData();
+  }
+}, [token, fetchAllData]);
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    try {
-      const [statsData, membersData, tournamentsData, matchesData, newsData] = await Promise.all([
+
+  const fetchAllData = useCallback(async () => {
+  setLoading(true);
+  try {
+    const [statsData, membersData, tournamentsData, matchesData, newsData] =
+      await Promise.all([
         api.getAdminStats(token),
         api.getMembers(),
         api.getTournaments(),
         api.getMatches(),
         api.getNews()
       ]);
-      setStats(statsData);
-      setMembers(membersData);
-      setTournaments(tournamentsData);
-      setMatches(matchesData);
-      setNews(newsData);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      if (err.message.includes('401') || err.message.includes('token')) {
-        logout();
-        navigate('/admin/login');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
+    setStats(statsData);
+    setMembers(membersData);
+    setTournaments(tournamentsData);
+    setMatches(matchesData);
+    setNews(newsData);
+  } catch (err) {
+    console.error('Error fetching data:', err);
+    if (err.message.includes('401') || err.message.includes('token')) {
+      logout();
+      navigate('/admin/login');
+    }
+  } finally {
+    setLoading(false);
+  }
+}, [token, logout, navigate]);
+  
   const handleRefreshRatings = async () => {
     setRefreshingRatings(true);
     try {
