@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Crown, Lock, User, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
@@ -23,11 +23,12 @@ export default function AdminLoginPage() {
     email: ''
   });
 
-  // Redirect if already authenticated
-  if (isAuthenticated) {
-    navigate('/admin/dashboard');
-    return null;
-  }
+  // Redirect if already authenticated - must be in useEffect to avoid render issues
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -49,18 +49,6 @@ export default function AdminDashboard() {
     title: '', content: '', image_url: ''
   });
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      navigate('/admin/login');
-    }
-  }, [isAuthenticated, isLoading, navigate]);
-useEffect(() => {
-  if (token) {
-    fetchAllData();
-  }
-}, [token, fetchAllData]);
-
-
   const fetchAllData = useCallback(async () => {
   setLoading(true);
   try {
@@ -88,6 +76,20 @@ useEffect(() => {
     setLoading(false);
   }
 }, [token, logout, navigate]);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      navigate('/admin/login', { replace: true });
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
+  // Fetch data when token is available
+  useEffect(() => {
+    if (token) {
+      fetchAllData();
+    }
+  }, [token, fetchAllData]);
   
   const handleRefreshRatings = async () => {
     setRefreshingRatings(true);
