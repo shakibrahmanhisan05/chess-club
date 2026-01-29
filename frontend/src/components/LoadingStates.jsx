@@ -174,7 +174,7 @@ export const useDataLoader = (fetchFn, deps = []) => {
       setLoading(false);
     }
   }, [fetchFn]);
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
   }, [...deps, load]);
