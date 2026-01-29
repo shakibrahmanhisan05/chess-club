@@ -9,8 +9,12 @@ import TournamentsPage from "./pages/TournamentsPage";
 import NewsPage from "./pages/NewsPage";
 import MemberProfilePage from "./pages/MemberProfilePage";
 import AboutPage from "./pages/AboutPage";
+import StatisticsPage from "./pages/StatisticsPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import MemberLoginPage from "./pages/MemberLoginPage";
+import MemberRegisterPage from "./pages/MemberRegisterPage";
+import MemberDashboardPage from "./pages/MemberDashboardPage";
 import "./App.css";
 
 function App() {
@@ -29,6 +33,7 @@ function App() {
           }}
         />
         <Routes>
+          {/* Public routes with Layout */}
           <Route path="/" element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="members" element={<MembersPage />} />
@@ -36,10 +41,18 @@ function App() {
             <Route path="leaderboard" element={<LeaderboardPage />} />
             <Route path="tournaments" element={<TournamentsPage />} />
             <Route path="news" element={<NewsPage />} />
+            <Route path="statistics" element={<StatisticsPage />} />
             <Route path="about" element={<AboutPage />} />
           </Route>
+          
+          {/* Admin routes (no layout) */}
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          
+          {/* Member auth routes (no layout) */}
+          <Route path="/member/login" element={<MemberLoginPage />} />
+          <Route path="/member/register" element={<MemberRegisterPage />} />
+          <Route path="/member/dashboard" element={<MemberDashboardPage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

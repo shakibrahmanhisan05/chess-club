@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Crown, Users, Trophy, Newspaper, ArrowRight, 
-  Zap, Target, Star, ChevronRight
+  Zap, Target, Star, ChevronRight, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
+import { SkeletonCard, SkeletonGrid, ErrorState } from '../components/LoadingStates';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -27,30 +28,35 @@ export default function HomePage() {
   const [latestNews, setLatestNews] = useState([]);
   const [stats, setStats] = useState({ members: 0, tournaments: 0, matches: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [leaderboard, newsData, membersData, tournamentsData, matchesData] = await Promise.all([
+        api.getLeaderboard('rapid', 5),
+        api.getNews(1, 3),
+        api.getMembers({ limit: 1 }),
+        api.getTournaments({ limit: 1 }),
+        api.getMatches({ limit: 1 })
+      ]);
+      setTopPlayers(leaderboard.leaderboard || []);
+      setLatestNews(newsData.news || []);
+      setStats({
+        members: membersData.total || 0,
+        tournaments: tournamentsData.total || 0,
+        matches: matchesData.total || 0
+      });
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [leaderboard, news, members, tournaments, matches] = await Promise.all([
-          api.getLeaderboard('rapid'),
-          api.getNews(),
-          api.getMembers(),
-          api.getTournaments(),
-          api.getMatches()
-        ]);
-        setTopPlayers(leaderboard.leaderboard?.slice(0, 5) || []);
-        setLatestNews(news.slice(0, 3) || []);
-        setStats({
-          members: members.length,
-          tournaments: tournaments.length,
-          matches: matches.length
-        });
-      } catch (err) {
-        console.error('Error fetching data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, []);
 
@@ -165,15 +171,44 @@ export default function HomePage() {
                 data-testid={`stat-${stat.label.toLowerCase().replace(' ', '-')}`}
               >
                 <stat.icon className={`w-8 h-8 mb-4 ${stat.color === 'violet' ? 'text-violet-500' : 'text-cyan-500'}`} />
-                <p className="text-3xl sm:text-4xl font-bold text-white mb-1 mono">
-                  {loading ? '...' : stat.value}
-                </p>
+                {loading ? (
+                  <div className="h-10 w-16 bg-white/10 rounded animate-pulse mb-1" />
+                ) : (
+                  <p className="text-3xl sm:text-4xl font-bold text-white mb-1 mono">
+                    {stat.value}
+                  </p>
+                )}
                 <p className="text-sm text-neutral-400">{stat.label}</p>
               </motion.div>
             ))}
           </motion.div>
         </div>
       </section>
+
+      {/* Error Banner */}
+      {error && (
+        <section className="py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+                <p className="text-red-400">
+                  {error.message || "Failed to load some data. Please try again."}
+                </p>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={fetchData}
+                className="text-red-400 hover:text-red-300"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Top Players Section */}
       <section className="py-20">
@@ -197,13 +232,13 @@ export default function HomePage() {
 
           <div className="space-y-4">
             {loading ? (
+              // Loading skeletons
               Array(5).fill(0).map((_, i) => (
-                <div key={i} className="glass-card rounded-xl p-4 animate-pulse">
-                  <div className="h-12 bg-white/5 rounded" />
-                </div>
+                <SkeletonCard key={i} />
               ))
             ) : topPlayers.length === 0 ? (
               <div className="glass-card rounded-xl p-8 text-center">
+                <Users className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
                 <p className="text-neutral-400">No players yet. Add members to see rankings!</p>
               </div>
             ) : (
@@ -228,9 +263,9 @@ export default function HomePage() {
                     }`}>
                       {idx + 1}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-white">{player.name}</h3>
-                      <p className="text-sm text-neutral-400">{player.department}</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-white truncate">{player.name}</h3>
+                      <p className="text-sm text-neutral-400 truncate">{player.department}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold mono text-violet-400">
@@ -268,8 +303,16 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {loading ? (
+              // Loading skeletons
               Array(3).fill(0).map((_, i) => (
-                <div key={i} className="glass-card rounded-2xl h-64 animate-pulse" />
+                <div key={i} className="glass-card rounded-2xl overflow-hidden animate-pulse">
+                  <div className="h-40 bg-white/10" />
+                  <div className="p-6">
+                    <div className="h-4 bg-white/10 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-white/10 rounded w-full mb-1" />
+                    <div className="h-3 bg-white/10 rounded w-2/3" />
+                  </div>
+                </div>
               ))
             ) : latestNews.length === 0 ? (
               <div className="md:col-span-3 glass-card rounded-2xl p-8 text-center">
@@ -293,12 +336,13 @@ export default function HomePage() {
                         src={news.image_url} 
                         alt={news.title}
                         className="w-full h-full object-cover"
+                        loading="lazy"
                       />
                     )}
                     <div className="absolute inset-0 news-card-overlay" />
                   </div>
                   <div className="p-6">
-                    <h3 className="font-semibold text-white mb-2 group-hover:text-violet-400 transition-colors">
+                    <h3 className="font-semibold text-white mb-2 group-hover:text-violet-400 transition-colors line-clamp-2">
                       {news.title}
                     </h3>
                     <p className="text-sm text-neutral-400 line-clamp-2">{news.content}</p>
@@ -330,11 +374,18 @@ export default function HomePage() {
               <p className="text-neutral-400 mb-8 max-w-xl mx-auto">
                 Connect with fellow chess players, participate in tournaments, and climb the leaderboard.
               </p>
-              <Link to="/about" data-testid="cta-learn-more">
-                <Button className="btn-primary">
-                  Learn More About Us
-                </Button>
-              </Link>
+              <div className="flex flex-wrap justify-center gap-4">
+                <Link to="/member/register" data-testid="cta-join">
+                  <Button className="btn-primary">
+                    Join Now
+                  </Button>
+                </Link>
+                <Link to="/about" data-testid="cta-learn-more">
+                  <Button className="btn-secondary">
+                    Learn More About Us
+                  </Button>
+                </Link>
+              </div>
             </div>
           </motion.div>
         </div>

@@ -1,31 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Clock, Zap, Target, RefreshCw, Crown } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
+import { ErrorState, EmptyState } from '../components/LoadingStates';
 
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [timeControl, setTimeControl] = useState('rapid');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const fetchLeaderboard = async (tc) => {
+  const fetchLeaderboard = useCallback(async (tc) => {
     setLoading(true);
+    setError(null);
     try {
       const data = await api.getLeaderboard(tc);
       setLeaderboard(data.leaderboard || []);
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
+      setError(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchLeaderboard(timeControl);
-  }, [timeControl]);
+  }, [timeControl, fetchLeaderboard]);
 
   const getRatingColor = (rating) => {
     if (!rating) return 'text-neutral-500';
@@ -50,21 +54,21 @@ export default function LeaderboardPage() {
   ];
 
   return (
-    <div className="min-h-screen py-20" data-testid="leaderboard-page">
+    <div className="min-h-screen py-8 sm:py-20" data-testid="leaderboard-page">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-10"
+          className="mb-6 sm:mb-10"
         >
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center">
-              <Trophy className="w-7 h-7 text-white" />
+          <div className="flex items-center gap-3 sm:gap-4 mb-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center">
+              <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-white">Leaderboard</h1>
-              <p className="text-neutral-400">Live rankings from Chess.com</p>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">Leaderboard</h1>
+              <p className="text-sm sm:text-base text-neutral-400">Live rankings from Chess.com</p>
             </div>
           </div>
         </motion.div>
@@ -75,18 +79,19 @@ export default function LeaderboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Tabs value={timeControl} onValueChange={setTimeControl} className="mb-8">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <TabsList className="glass rounded-full p-1">
+          <Tabs value={timeControl} onValueChange={setTimeControl} className="mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <TabsList className="glass rounded-full p-1 flex-wrap">
                 {timeControls.map((tc) => (
                   <TabsTrigger
                     key={tc.value}
                     value={tc.value}
-                    className="rounded-full px-6 py-2 data-[state=active]:bg-violet-600 data-[state=active]:text-white"
+                    className="rounded-full px-4 sm:px-6 py-2 text-sm sm:text-base data-[state=active]:bg-violet-600 data-[state=active]:text-white"
                     data-testid={`tab-${tc.value}`}
                   >
-                    <tc.icon className="w-4 h-4 mr-2" />
-                    {tc.label}
+                    <tc.icon className="w-4 h-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">{tc.label}</span>
+                    <span className="sm:hidden">{tc.label.substring(0, 3)}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -95,7 +100,7 @@ export default function LeaderboardPage() {
                 size="sm"
                 onClick={() => fetchLeaderboard(timeControl)}
                 disabled={loading}
-                className="rounded-full border-white/20"
+                className="rounded-full border-white/20 w-full sm:w-auto"
                 data-testid="refresh-leaderboard"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -103,38 +108,43 @@ export default function LeaderboardPage() {
               </Button>
             </div>
 
+            {/* Error State */}
+            {error && (
+              <div className="mt-8">
+                <ErrorState 
+                  message={error.message || "Failed to load leaderboard"} 
+                  onRetry={() => fetchLeaderboard(timeControl)}
+                  isNetworkError={error.isNetworkError}
+                />
+              </div>
+            )}
+
             {/* Leaderboard Content */}
-            {timeControls.map((tc) => (
-              <TabsContent key={tc.value} value={tc.value} className="mt-8">
+            {!error && timeControls.map((tc) => (
+              <TabsContent key={tc.value} value={tc.value} className="mt-6 sm:mt-8">
                 {loading ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {Array(10).fill(0).map((_, i) => (
-                      <div key={i} className="glass-card rounded-xl p-4 animate-pulse">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-white/5" />
+                      <div key={i} className="glass-card rounded-xl p-3 sm:p-4 animate-pulse">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5" />
                           <div className="flex-1">
-                            <div className="h-5 bg-white/5 rounded w-1/3 mb-2" />
-                            <div className="h-4 bg-white/5 rounded w-1/4" />
+                            <div className="h-4 sm:h-5 bg-white/5 rounded w-1/3 mb-2" />
+                            <div className="h-3 sm:h-4 bg-white/5 rounded w-1/4" />
                           </div>
-                          <div className="h-8 w-20 bg-white/5 rounded" />
+                          <div className="h-6 sm:h-8 w-16 sm:w-20 bg-white/5 rounded" />
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : leaderboard.length === 0 ? (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="glass-card rounded-2xl p-12 text-center"
-                  >
-                    <Crown className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-white mb-2">No Rankings Yet</h3>
-                    <p className="text-neutral-400">
-                      Add members with Chess.com usernames to see the leaderboard
-                    </p>
-                  </motion.div>
+                  <EmptyState
+                    icon={Crown}
+                    title="No Rankings Yet"
+                    description="Add members with Chess.com usernames to see the leaderboard"
+                  />
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {leaderboard.map((player, idx) => {
                       const ratingKey = `${tc.value}_rating`;
                       const rating = player[ratingKey];
@@ -148,30 +158,30 @@ export default function LeaderboardPage() {
                         >
                           <Link
                             to={`/members/${player.id}`}
-                            className="glass-card rounded-xl p-4 flex items-center gap-4 card-hover block group"
+                            className="glass-card rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4 card-hover block group"
                             data-testid={`leaderboard-row-${idx + 1}`}
                           >
                             {/* Rank */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg ${getRankStyle(player.rank)}`}>
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center font-bold text-base sm:text-lg ${getRankStyle(player.rank)}`}>
                               {player.rank}
                             </div>
 
                             {/* Player Info */}
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-white group-hover:text-violet-400 transition-colors truncate">
+                              <h3 className="font-semibold text-sm sm:text-base text-white group-hover:text-violet-400 transition-colors truncate">
                                 {player.name}
                               </h3>
-                              <p className="text-sm text-neutral-400 truncate">{player.department}</p>
+                              <p className="text-xs sm:text-sm text-neutral-400 truncate">{player.department}</p>
                             </div>
 
                             {/* Chess.com username */}
-                            <div className="hidden sm:block text-sm text-cyan-400">
+                            <div className="hidden md:block text-xs sm:text-sm text-cyan-400">
                               @{player.chess_com_username}
                             </div>
 
                             {/* Rating */}
                             <div className="text-right">
-                              <p className={`text-2xl font-bold mono ${getRatingColor(rating)}`}>
+                              <p className={`text-xl sm:text-2xl font-bold mono ${getRatingColor(rating)}`}>
                                 {rating || '—'}
                               </p>
                               <p className="text-xs text-neutral-500">Elo</p>
@@ -192,10 +202,10 @@ export default function LeaderboardPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="mt-12 glass-card rounded-2xl p-6"
+          className="mt-8 sm:mt-12 glass-card rounded-xl sm:rounded-2xl p-4 sm:p-6"
         >
           <h3 className="font-semibold text-white mb-4">Rating Categories</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
             {[
               { range: '2000+', color: 'text-red-500', label: 'Master' },
               { range: '1800-1999', color: 'text-orange-500', label: 'Expert' },
@@ -206,7 +216,7 @@ export default function LeaderboardPage() {
               <div key={cat.label} className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${cat.color.replace('text-', 'bg-')}`} />
                 <div>
-                  <p className={`font-medium ${cat.color}`}>{cat.label}</p>
+                  <p className={`font-medium text-sm sm:text-base ${cat.color}`}>{cat.label}</p>
                   <p className="text-xs text-neutral-500">{cat.range}</p>
                 </div>
               </div>
