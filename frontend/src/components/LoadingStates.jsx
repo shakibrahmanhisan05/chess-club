@@ -1,4 +1,3 @@
-import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, AlertCircle, RefreshCw, WifiOff } from 'lucide-react';
 import { Button } from './ui/button';
@@ -155,43 +154,3 @@ export const LoadingOverlay = ({ message = "Processing..." }) => (
     </div>
   </div>
 );
-
-// Data loading wrapper hook
-export const useDataLoader = (fetchFn, deps = []) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchFn();
-      setData(result);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchFn]);
-// eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    load();
-  }, [...deps, load]);
-
-  return { data, loading, error, refetch: load };
-};
-
-export default {
-  PageLoader,
-  InlineLoader,
-  SkeletonCard,
-  SkeletonList,
-  SkeletonTableRow,
-  SkeletonGrid,
-  ErrorState,
-  EmptyState,
-  ProgressBar,
-  LoadingOverlay,
-  useDataLoader
-};

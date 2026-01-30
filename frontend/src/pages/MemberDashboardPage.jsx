@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  Crown, LogOut, Settings, Trophy, Clock, Target, Zap,
-  Calendar, User, TrendingUp, Award, ChevronRight, Loader2, Edit
+  Crown, LogOut, Trophy, Clock, Target, Zap,
+  TrendingUp, Award, ChevronRight
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
-import { ErrorState, SkeletonCard } from '../components/LoadingStates';
+import { ErrorState } from '../components/LoadingStates';
 
 export default function MemberDashboardPage() {
   const navigate = useNavigate();
@@ -61,12 +61,6 @@ export default function MemberDashboardPage() {
     localStorage.removeItem('memberData');
     toast.success('Logged out successfully');
     navigate('/');
-  };
-
-  const getRatingTrend = (rating, games) => {
-    if (!games || games < 10) return null;
-    // This would need actual data to be meaningful
-    return 'stable';
   };
 
   if (loading) {
