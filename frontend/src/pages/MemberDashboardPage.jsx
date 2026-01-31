@@ -65,7 +65,7 @@ export default function MemberDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen py-8" data-testid="member-dashboard-loading">
+      <div className="min-h-screen py-8 bg-[#050505]" data-testid="member-dashboard-loading">
         <div className="max-w-6xl mx-auto px-4">
           <div className="animate-pulse space-y-6">
             <div className="h-32 bg-white/5 rounded-2xl" />
@@ -82,7 +82,7 @@ export default function MemberDashboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen py-8" data-testid="member-dashboard-error">
+      <div className="min-h-screen py-8 bg-[#050505]" data-testid="member-dashboard-error">
         <div className="max-w-6xl mx-auto px-4">
           <ErrorState
             message={error.message || "Failed to load your profile"}
@@ -95,7 +95,7 @@ export default function MemberDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen py-8" data-testid="member-dashboard-page">
+    <div className="min-h-screen py-8 bg-[#050505]" data-testid="member-dashboard-page">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div

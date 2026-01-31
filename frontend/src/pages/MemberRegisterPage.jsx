@@ -115,7 +115,7 @@ export default function MemberRegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 py-8" data-testid="member-register-page">
+    <div className="min-h-screen flex items-center justify-center p-4 py-8 bg-[#050505]" data-testid="member-register-page">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

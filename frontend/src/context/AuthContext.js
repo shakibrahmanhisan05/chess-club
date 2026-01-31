@@ -7,12 +7,26 @@ const AuthContext = createContext(null);
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) {
+    // Return a safe default instead of throwing - this can happen during initial render
+    console.warn('useAuth called outside AuthProvider');
+    return {
+      admin: null,
+      token: null,
+      login: () => {},
+      loginWithCredentials: async () => ({ ok: false }),
+      logout: () => {},
+      isAuthenticated: false,
+      isLoading: false,
+      setAdmin: () => {}
+    };
+  }
   return ctx;
 };
 
 export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
+
   const [admin, setAdmin] = useState(() => {
     try {
       const raw = localStorage.getItem('adminData');
@@ -21,7 +35,15 @@ export const AuthProvider = ({ children }) => {
       return null;
     }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('adminToken') || null);
+  
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('adminToken') || null;
+    } catch (e) {
+      return null;
+    }
+  });
+  
   const [isLoading, setIsLoading] = useState(true);
 
   // login that the UI uses (token + admin object)
@@ -46,6 +68,9 @@ export const AuthProvider = ({ children }) => {
       if (!newToken) throw new Error('Login did not return a token');
       login(newToken, adminData);
       return { ok: true, data: res };
+    } catch (e) {
+      console.error('Login error:', e);
+      throw e;
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +83,14 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminData');
     } catch (e) {}
-    navigate('/admin/login', { replace: true });
+    
+    // Safe navigation
+    try {
+      navigate('/admin/login', { replace: true });
+    } catch (e) {
+      // Fallback if navigate fails
+      window.location.href = '/admin/login';
+    }
   }, [navigate]);
 
   // On mount, mark loading false (we already read localStorage synchronously above)

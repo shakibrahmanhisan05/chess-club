@@ -38,8 +38,9 @@ CHESS_COM_API = "https://api.chess.com/pub"
 # Rate limiting storage (in production, use Redis)
 rate_limit_storage: Dict[str, List[datetime]] = defaultdict(list)
 RATE_LIMIT_WINDOW = 60  # seconds
-RATE_LIMIT_MAX_REQUESTS = 30  # requests per window
-LOGIN_RATE_LIMIT = 5  # login attempts per window
+RATE_LIMIT_MAX_REQUESTS = 60  # requests per window (increased for better UX)
+LOGIN_RATE_LIMIT = 10  # login attempts per window (increased)
+REGISTER_RATE_LIMIT = 10  # registration attempts per window
 
 # Cache for Chess.com API responses (in production, use Redis)
 chess_com_cache: Dict[str, Dict[str, Any]] = {}
@@ -993,8 +994,8 @@ async def get_club_statistics():
 async def register_member(data: MemberRegister, request: Request):
     """Register a new member account"""
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"member_register_{client_ip}", max_requests=5):
-        raise HTTPException(status_code=429, detail="Too many registration attempts")
+    if not check_rate_limit(f"member_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Please wait a minute and try again.")
     
     # Check if email already exists
     existing_email = await db.members.find_one({"email": data.email})
@@ -1134,8 +1135,8 @@ async def update_current_member(data: MemberUpdate, payload: dict = Depends(veri
 @api_router.post("/admin/register")
 async def register_admin(admin_data: AdminCreate, request: Request):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"admin_register_{client_ip}", max_requests=3):
-        raise HTTPException(status_code=429, detail="Too many registration attempts")
+    if not check_rate_limit(f"admin_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Please wait a minute and try again.")
     
     # Check if admin exists
     existing = await db.admins.find_one({"$or": [

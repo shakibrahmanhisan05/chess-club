@@ -50,7 +50,7 @@ export default function MemberLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" data-testid="member-login-page">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#050505]" data-testid="member-login-page">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
