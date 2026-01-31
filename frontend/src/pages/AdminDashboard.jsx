@@ -62,16 +62,19 @@ export default function AdminDashboard() {
       ]);
 
     setStats(statsData);
-    setMembers(membersData);
-    setTournaments(tournamentsData);
-    setMatches(matchesData);
-    setNews(newsData);
+    setMembers(membersData?.members || membersData || []);
+    setTournaments(tournamentsData?.tournaments || tournamentsData || []);
+    setMatches(matchesData?.matches || matchesData || []);
+    setNews(newsData?.news || newsData || []);
   } catch (err) {
     console.error('Error fetching data:', err);
-    if (err.message.includes('401') || err.message.includes('token')) {
+    if (err.isAuthError || err.status === 401 || err.message.toLowerCase().includes('expired') || err.message.toLowerCase().includes('token')) {
+      toast.error('Session expired. Please login again.');
       logout();
       navigate('/admin/login');
+      return;
     }
+    toast.error(err.message || 'Failed to load dashboard data');
   } finally {
     setLoading(false);
   }
@@ -98,7 +101,13 @@ export default function AdminDashboard() {
       toast.success('Ratings refreshed successfully!');
       fetchAllData();
     } catch (err) {
-      toast.error('Failed to refresh ratings');
+      if (err.isAuthError || err.status === 401) {
+        toast.error('Session expired. Please login again.');
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      toast.error(err.message || 'Failed to refresh ratings');
     } finally {
       setRefreshingRatings(false);
     }
@@ -125,7 +134,13 @@ export default function AdminDashboard() {
       resetMemberForm();
       fetchAllData();
     } catch (err) {
-      toast.error(err.message);
+      if (err.isAuthError || err.status === 401) {
+        toast.error('Session expired. Please login again.');
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      toast.error(err.message || 'Operation failed');
     }
   };
 
@@ -136,7 +151,13 @@ export default function AdminDashboard() {
       toast.success('Member deleted');
       fetchAllData();
     } catch (err) {
-      toast.error('Failed to delete member');
+      if (err.isAuthError || err.status === 401) {
+        toast.error('Session expired. Please login again.');
+        logout();
+        navigate('/admin/login');
+        return;
+      }
+      toast.error(err.message || 'Failed to delete member');
     }
   };
 

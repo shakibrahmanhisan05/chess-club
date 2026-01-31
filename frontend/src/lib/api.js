@@ -53,6 +53,23 @@ async function request(url, options = {}, retries = 0) {
     const { ok, status, data } = await parseResponseOnce(res);
 
     if (!ok) {
+      // Handle token expiration - clear stored tokens
+      if (status === 401) {
+        const msg = data && (data.message || data.error || data.detail) 
+          ? (data.message || data.error || data.detail) 
+          : 'Session expired. Please login again.';
+        
+        // Clear admin token if expired
+        if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('token')) {
+          localStorage.removeItem('adminToken');
+          localStorage.removeItem('adminData');
+          localStorage.removeItem('memberToken');
+          localStorage.removeItem('memberData');
+        }
+        
+        throw new ApiError(msg, status, data);
+      }
+
       // Handle rate limiting with retry
       if (status === 429 && retries < MAX_RETRIES) {
         const retryAfter = parseInt(res.headers.get('Retry-After')) || RETRY_DELAY * (retries + 1);
