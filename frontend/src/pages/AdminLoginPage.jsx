@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Crown, Lock, User, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { Crown, Lock, User, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
+
+// Two-step verification code
+const VERIFICATION_CODE = '496149';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -16,6 +19,11 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Two-step verification state
+  const [verificationStep, setVerificationStep] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [pendingLoginData, setPendingLoginData] = useState(null);
   
   const [formData, setFormData] = useState({
     username: '',
@@ -38,9 +46,12 @@ export default function AdminLoginPage() {
     try {
       if (mode === 'login') {
         const response = await api.login(formData.username, formData.password);
-        login(response.token, response.admin);
-        toast.success('Welcome back!');
-        navigate('/admin/dashboard');
+        // Store login data and show verification step
+        setPendingLoginData({ token: response.token, admin: response.admin });
+        setVerificationStep(true);
+        setLoading(false);
+        toast.info('Please enter the verification code to continue.');
+        return;
       } else {
         await api.register(formData.username, formData.password, formData.email);
         toast.success('Registration successful! Please login.');
@@ -53,6 +64,35 @@ export default function AdminLoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerificationSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (verificationCode === VERIFICATION_CODE) {
+      // Verification successful - complete login
+      login(pendingLoginData.token, pendingLoginData.admin);
+      toast.success('Verification successful! Welcome back!');
+      navigate('/admin/dashboard');
+    } else {
+      // Verification failed - redirect to homepage
+      toast.error('Invalid verification code. Redirecting to homepage...');
+      setVerificationStep(false);
+      setPendingLoginData(null);
+      setVerificationCode('');
+      setFormData({ username: '', password: '', email: '' });
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+    }
+  };
+
+  const handleCancelVerification = () => {
+    setVerificationStep(false);
+    setPendingLoginData(null);
+    setVerificationCode('');
+    setError('');
   };
 
   return (
@@ -75,134 +115,210 @@ export default function AdminLoginPage() {
 
         {/* Form Card */}
         <div className="glass-card rounded-2xl p-8">
-          {/* Mode Toggle */}
-          <div className="flex rounded-full bg-white/5 p-1 mb-8">
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
-                mode === 'login' 
-                  ? 'bg-violet-600 text-white' 
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-              data-testid="login-tab"
-            >
-              Login
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('register')}
-              className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
-                mode === 'register' 
-                  ? 'bg-violet-600 text-white' 
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-              data-testid="register-tab"
-            >
-              Register
-            </button>
-          </div>
-
-          {/* Error Message */}
-          {error && (
+          {/* Verification Step */}
+          {verificationStep ? (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
             >
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="username" className="text-neutral-300">Username</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="Enter username"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="pl-10 bg-white/5 border-white/10 focus:border-violet-500"
-                  required
-                  data-testid="username-input"
-                />
+              {/* Verification Header */}
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mx-auto mb-4">
+                  <ShieldCheck className="w-7 h-7 text-white" />
+                </div>
+                <h2 className="text-xl font-semibold text-white">Two-Step Verification</h2>
+                <p className="text-neutral-400 text-sm mt-2">
+                  Please enter the verification code to complete login
+                </p>
               </div>
-            </div>
 
-            {mode === 'register' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="space-y-2"
-              >
-                <Label htmlFor="email" className="text-neutral-300">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="bg-white/5 border-white/10 focus:border-violet-500"
-                  required={mode === 'register'}
-                  data-testid="email-input"
-                />
-              </motion.div>
-            )}
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6"
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-neutral-300">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-violet-500"
-                  required
-                  data-testid="password-input"
-                />
+              <form onSubmit={handleVerificationSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="verificationCode" className="text-neutral-300">Verification Code</Label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+                    <Input
+                      id="verificationCode"
+                      type="text"
+                      placeholder="Enter 6-digit code"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      className="pl-10 bg-white/5 border-white/10 focus:border-violet-500 text-center text-lg tracking-widest"
+                      maxLength={6}
+                      required
+                      autoFocus
+                      data-testid="verification-code-input"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full btn-primary"
+                  data-testid="verify-btn"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" />
+                    Verify & Login
+                  </div>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancelVerification}
+                  className="w-full border-white/20 text-neutral-400 hover:text-white"
+                  data-testid="cancel-verification-btn"
+                >
+                  Cancel
+                </Button>
+              </form>
+            </motion.div>
+          ) : (
+            <>
+              {/* Mode Toggle */}
+              <div className="flex rounded-full bg-white/5 p-1 mb-8">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+                  onClick={() => setMode('login')}
+                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
+                    mode === 'login' 
+                      ? 'bg-violet-600 text-white' 
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                  data-testid="login-tab"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('register')}
+                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
+                    mode === 'register' 
+                      ? 'bg-violet-600 text-white' 
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                  data-testid="register-tab"
+                >
+                  Register
                 </button>
               </div>
-            </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-primary"
-              data-testid="submit-btn"
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {mode === 'login' ? 'Signing in...' : 'Creating account...'}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <LogIn className="w-4 h-4" />
-                  {mode === 'login' ? 'Sign In' : 'Create Account'}
-                </div>
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6"
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
               )}
-            </Button>
-          </form>
 
-          {/* Back to Home */}
-          <div className="mt-6 text-center">
-            <a href="/" className="text-sm text-neutral-500 hover:text-violet-400 transition-colors">
-              ← Back to Home
-            </a>
-          </div>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-neutral-300">Username</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+                    <Input
+                      id="username"
+                      type="text"
+                      placeholder="Enter username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      className="pl-10 bg-white/5 border-white/10 focus:border-violet-500"
+                      required
+                      data-testid="username-input"
+                    />
+                  </div>
+                </div>
+
+                {mode === 'register' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-2"
+                  >
+                    <Label htmlFor="email" className="text-neutral-300">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="Enter email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="bg-white/5 border-white/10 focus:border-violet-500"
+                      required={mode === 'register'}
+                      data-testid="email-input"
+                    />
+                  </motion.div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-neutral-300">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-violet-500"
+                      required
+                      data-testid="password-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full btn-primary"
+                  data-testid="submit-btn"
+                >
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      {mode === 'login' ? 'Signing in...' : 'Creating account...'}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <LogIn className="w-4 h-4" />
+                      {mode === 'login' ? 'Sign In' : 'Create Account'}
+                    </div>
+                  )}
+                </Button>
+              </form>
+
+              {/* Back to Home */}
+              <div className="mt-6 text-center">
+                <a href="/" className="text-sm text-neutral-500 hover:text-violet-400 transition-colors">
+                  ← Back to Home
+                </a>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
     </div>

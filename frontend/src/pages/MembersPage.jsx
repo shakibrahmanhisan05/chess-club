@@ -151,13 +151,13 @@ export default function MembersPage() {
             
             {/* Desktop Filters */}
             <div className="hidden sm:flex gap-4">
-              <Select value={department} onValueChange={setDepartment}>
+              <Select value={department || "all"} onValueChange={(val) => setDepartment(val === "all" ? "" : val)}>
                 <SelectTrigger className="w-[180px] bg-white/5 border-white/10">
                   <Filter className="w-4 h-4 mr-2" />
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Departments</SelectItem>
+                  <SelectItem value="all">All Departments</SelectItem>
                   {departments.map(dept => (
                     <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                   ))}
@@ -207,13 +207,13 @@ export default function MembersPage() {
               exit={{ opacity: 0, height: 0 }}
               className="sm:hidden mt-4 pt-4 border-t border-white/10 space-y-4"
             >
-              <Select value={department} onValueChange={setDepartment}>
+              <Select value={department || "all"} onValueChange={(val) => setDepartment(val === "all" ? "" : val)}>
                 <SelectTrigger className="w-full bg-white/5 border-white/10">
                   <Filter className="w-4 h-4 mr-2" />
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Departments</SelectItem>
+                  <SelectItem value="all">All Departments</SelectItem>
                   {departments.map(dept => (
                     <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                   ))}
