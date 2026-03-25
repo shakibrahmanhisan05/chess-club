@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 export default function AdminLoginPage() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
-  const [mode, setMode] = useState('login'); // 'login' or 'register'
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,18 +35,11 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      if (mode === 'login') {
-        const response = await api.login(formData.username, formData.password);
-        login(response.token, response.admin);
-        toast.success('Login successful! Welcome back.');
-        navigate('/admin/dashboard');
-        return;
-      } else {
-        await api.register(formData.username, formData.password, formData.email);
-        toast.success('Registration successful! Please login.');
-        setMode('login');
-        setFormData({ ...formData, password: '' });
-      }
+      const response = await api.login(formData.username, formData.password);
+      login(response.token, response.admin);
+      toast.success('Login successful! Welcome back.');
+      navigate('/admin/dashboard');
+      return;
     } catch (err) {
       setError(err.message || 'An error occurred');
       toast.error(err.message || 'An error occurred');
@@ -77,34 +69,6 @@ export default function AdminLoginPage() {
         {/* Form Card */}
         <div className="glass-card rounded-2xl p-8">
           <>
-              {/* Mode Toggle */}
-              <div className="flex rounded-full bg-white/5 p-1 mb-8">
-                <button
-                  type="button"
-                  onClick={() => setMode('login')}
-                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
-                    mode === 'login' 
-                      ? 'bg-violet-600 text-white' 
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  data-testid="login-tab"
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('register')}
-                  className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
-                    mode === 'register' 
-                      ? 'bg-violet-600 text-white' 
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  data-testid="register-tab"
-                >
-                  Register
-                </button>
-              </div>
-
               {/* Error Message */}
               {error && (
                 <motion.div
@@ -134,26 +98,6 @@ export default function AdminLoginPage() {
                     />
                   </div>
                 </div>
-
-                {mode === 'register' && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="space-y-2"
-                  >
-                    <Label htmlFor="email" className="text-neutral-300">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Enter email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-white/5 border-white/10 focus:border-violet-500"
-                      required={mode === 'register'}
-                      data-testid="email-input"
-                    />
-                  </motion.div>
-                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-neutral-300">Password</Label>
@@ -188,12 +132,12 @@ export default function AdminLoginPage() {
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      {mode === 'login' ? 'Signing in...' : 'Creating account...'}
+                      Signing in...
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <LogIn className="w-4 h-4" />
-                      {mode === 'login' ? 'Sign In' : 'Create Account'}
+                      Sign In
                     </div>
                   )}
                 </Button>

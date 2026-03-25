@@ -26,11 +26,14 @@ This guide explains the fixes applied to resolve the three main issues and how t
 
 1. **Set Environment Variables in Render Dashboard**:
    ```
-   MONGO_URL=mongodb+srv://your_username:your_password@cluster.mongodb.net/database_name?retryWrites=true&w=majority
-   DB_NAME=chess_club_db
-   CORS_ORIGINS=https://your-frontend.vercel.app
-   JWT_SECRET=your_secure_random_string_here
-   ```
+    MONGO_URL=mongodb+srv://your_username:your_password@cluster.mongodb.net/database_name?retryWrites=true&w=majority
+    DB_NAME=chess_club_db
+    CORS_ORIGINS=https://your-frontend.vercel.app
+    JWT_SECRET=your_secure_random_string_here
+    ALLOW_ADMIN_BOOTSTRAP=false
+    ADMIN_BOOTSTRAP_TOKEN=<set only when bootstrapping first admin>
+    REDIS_URL=redis://<your-redis-host>:6379/0
+    ```
 
    **Important**: 
    - Use your actual MongoDB Atlas connection string for `MONGO_URL`
@@ -99,6 +102,16 @@ Ensure your MongoDB Atlas cluster:
 - Ensure `CORS_ORIGINS` in Render includes your Vercel domain
 - Format: `https://your-frontend.vercel.app` (no trailing slash)
 - Can use multiple origins: `https://app1.vercel.app,https://app2.vercel.app`
+- Wildcard `*` is intentionally not allowed because credentials are enabled.
+
+### Issue: Admin registration endpoint returns 403
+**Solution**:
+- This is expected by default for security.
+- Temporarily set:
+  - `ALLOW_ADMIN_BOOTSTRAP=true`
+  - `ADMIN_BOOTSTRAP_TOKEN=<strong random value>`
+- Call register with header `X-Admin-Bootstrap-Token: <token>`.
+- Immediately disable bootstrap again.
 
 ### Issue: "Token expired" immediately after login
 **Solution**:
@@ -122,16 +135,25 @@ You mentioned using UptimeRobot to ping the backend every 10 minutes. This is go
 
 ### Backend (`server.py`)
 - Moved CORS middleware before router inclusion (critical for proper CORS handling)
+- Enforced strong JWT secret checks at startup (no weak/default secret)
+- Added strict CORS origin parsing/validation (no wildcard)
+- Gated admin bootstrap registration behind environment flags and bootstrap token
+- Removed password reset token leakage from response/logs
+- Added pagination bounds and members sort allowlist/search escaping
+- Added pluggable Redis-backed cache/rate-limit with safe in-memory fallback
+- Added consistency cleanup for member/tournament deletions
 
 ### Frontend (`lib/api.js`)
 - Added automatic token cleanup on 401 errors
 - Clear both admin and member tokens when authentication fails
+- Fixed Retry-After handling to use seconds correctly
 
-### Frontend (`pages/AdminDashboard.jsx`)
-- Improved error handling to properly detect auth errors
-- Extract nested data from API responses (members, tournaments, etc.)
-- Added consistent token expiration handling across all operations
-- Show toast notifications for better user feedback
+### Frontend (`pages/AdminLoginPage.jsx`)
+- Removed fake client-side verification flow and hardcoded verification secret
+- Disabled in-UI admin self-registration path
+
+### Frontend (`public/index.html`)
+- Added baseline CSP policy to reduce token exfiltration/XSS risk surface
 
 ## Next Steps
 
@@ -139,13 +161,14 @@ You mentioned using UptimeRobot to ping the backend every 10 minutes. This is go
 2. Update environment variables in Render and Vercel dashboards
 3. Wait for automatic deployments to complete
 4. Test all three fixed issues
-5. Create your first admin account if needed:
+5. Create your first admin account if needed (bootstrap mode only):
    ```bash
-   # Use the admin register endpoint
-   curl -X POST https://your-backend.onrender.com/api/admin/register \
-     -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"securepassword","email":"admin@example.com"}'
-   ```
+    # Use the admin register endpoint
+    curl -X POST https://your-backend.onrender.com/api/admin/register \
+      -H "Content-Type: application/json" \
+      -H "X-Admin-Bootstrap-Token: <your_bootstrap_token>" \
+      -d '{"username":"admin","password":"securepassword","email":"admin@example.com"}'
+    ```
 
 ## Support
 
