@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -93,6 +94,9 @@ def test_safe_regex_escapes_untrusted_input():
     query = module.build_safe_regex_query("a.*(b)?[x]")
     assert query["$options"] == "i"
     assert query["$regex"] == r"a\.\*\(b\)\?\[x\]"
+    compiled = re.compile(query["$regex"], re.IGNORECASE)
+    assert compiled.search("hello a.*(b)?[x] world")
+    assert not compiled.search("hello aaa bbb world")
 
 
 def test_redact_sensitive_masks_values():
@@ -111,6 +115,17 @@ class FakeCursor:
 
     async def to_list(self, _limit):
         return self.rows
+
+    def __aiter__(self):
+        self._idx = 0
+        return self
+
+    async def __anext__(self):
+        if self._idx >= len(self.rows):
+            raise StopAsyncIteration
+        value = self.rows[self._idx]
+        self._idx += 1
+        return value
 
 
 class FakeCollection:
@@ -137,6 +152,9 @@ class FakeCollection:
 
     async def update_one(self, *_args, **_kwargs):
         return type("R", (), {"modified_count": 1})()
+
+    async def bulk_write(self, ops, ordered=False):
+        return type("R", (), {"modified_count": len(ops), "ordered": ordered})()
 
     async def delete_one(self, *_args, **_kwargs):
         self.delete_one_called += 1
@@ -204,3 +222,10 @@ def test_delete_tournament_cleans_related_matches():
     asyncio.run(module.delete_tournament("t1", {"sub": "a1", "username": "admin"}))
     assert matches.delete_many_called == 1
     assert tournaments.delete_one_called == 1
+
+
+def test_stats_delta_rejects_unexpected_result():
+    set_required_env()
+    module = load_server_module("server_test_stats_delta")
+    with pytest.raises(ValueError, match="Unexpected match result"):
+        module._stats_delta_for_result("forfeit")

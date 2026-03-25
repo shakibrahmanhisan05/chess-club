@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import UpdateOne
 import os
 import logging
 import re
@@ -613,7 +614,15 @@ def _stats_delta_for_result(result: str) -> Dict[str, Dict[str, int]]:
         return {"p1": {"wins": -1}, "p2": {"losses": -1}}
     if result == "0-1":
         return {"p1": {"losses": -1}, "p2": {"wins": -1}}
-    return {"p1": {"draws": -1}, "p2": {"draws": -1}}
+    if result == "1/2-1/2":
+        return {"p1": {"draws": -1}, "p2": {"draws": -1}}
+    raise ValueError(f"Unexpected match result value: {result}")
+
+async def _collect_all(cursor) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    async for row in cursor:
+        rows.append(row)
+    return rows
 
 async def _rollback_matches_stats(matches: List[Dict[str, Any]]) -> None:
     per_member: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -627,8 +636,10 @@ async def _rollback_matches_stats(matches: List[Dict[str, Any]]) -> None:
         if p2:
             for k, v in delta["p2"].items():
                 per_member[p2][k] += v
-    for member_id, member_delta in per_member.items():
-        await db.members.update_one({"id": member_id}, {"$inc": dict(member_delta)})
+    if not per_member:
+        return
+    ops = [UpdateOne({"id": member_id}, {"$inc": dict(member_delta)}) for member_id, member_delta in per_member.items()]
+    await db.members.bulk_write(ops, ordered=False)
 
 # ============= PUBLIC ROUTES =============
 
@@ -1468,7 +1479,7 @@ async def delete_member(member_id: str, payload: dict = Depends(verify_admin_tok
         raise HTTPException(status_code=404, detail="Member not found")
     
     # Delete dependent matches and clean tournament participant lists before deleting member
-    member_matches = await db.matches.find({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]}, {"_id": 0}).to_list(2000)
+    member_matches = await _collect_all(db.matches.find({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]}, {"_id": 0}))
     await _rollback_matches_stats(member_matches)
     await db.matches.delete_many({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]})
     await db.tournaments.update_many({"participants": member_id}, {"$pull": {"participants": member_id}})
@@ -1652,7 +1663,7 @@ async def delete_tournament(tournament_id: str, payload: dict = Depends(verify_a
         raise HTTPException(status_code=404, detail="Tournament not found")
     
     # Remove related matches from this tournament and rollback per-member stats
-    tournament_matches = await db.matches.find({"tournament_name": tournament.get('name')}, {"_id": 0}).to_list(2000)
+    tournament_matches = await _collect_all(db.matches.find({"tournament_name": tournament.get('name')}, {"_id": 0}))
     await _rollback_matches_stats(tournament_matches)
     await db.matches.delete_many({"tournament_name": tournament.get('name')})
 
