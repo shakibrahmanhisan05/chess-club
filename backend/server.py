@@ -7,6 +7,7 @@ import os
 import logging
 import re
 import secrets
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
 from typing import List, Optional, Dict, Any
@@ -17,6 +18,7 @@ import asyncio
 import jwt
 import bcrypt
 import httpx
+import redis.asyncio as redis_async
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -27,24 +29,32 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Settings
-JWT_SECRET = os.environ.get('JWT_SECRET', 'chess_club_secret_key_2024')
+JWT_SECRET = os.environ.get('JWT_SECRET')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 MEMBER_JWT_EXPIRATION_HOURS = 168  # 7 days for members
+WEAK_JWT_SECRETS = {
+    "chess_club_secret_key_2024",
+    "your_secure_random_string_here",
+    "change_me",
+    "secret",
+}
+
+# Admin bootstrap settings
+ALLOW_ADMIN_BOOTSTRAP = os.environ.get("ALLOW_ADMIN_BOOTSTRAP", "false").lower() == "true"
+ADMIN_BOOTSTRAP_TOKEN = os.environ.get("ADMIN_BOOTSTRAP_TOKEN")
 
 # Chess.com API
 CHESS_COM_API = "https://api.chess.com/pub"
 
-# Rate limiting storage (in production, use Redis)
-rate_limit_storage: Dict[str, List[datetime]] = defaultdict(list)
+# Rate limiting/cache settings
 RATE_LIMIT_WINDOW = 60  # seconds
 RATE_LIMIT_MAX_REQUESTS = 60  # requests per window (increased for better UX)
 LOGIN_RATE_LIMIT = 10  # login attempts per window (increased)
 REGISTER_RATE_LIMIT = 10  # registration attempts per window
 
-# Cache for Chess.com API responses (in production, use Redis)
-chess_com_cache: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 300  # 5 minutes cache
+REDIS_URL = os.environ.get("REDIS_URL")
 
 # Create the main app
 app = FastAPI(title="Chittagong University EChess Society API", version="2.0.0")
@@ -60,6 +70,85 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+def validate_jwt_secret(secret: Optional[str]) -> None:
+    if not secret:
+        raise RuntimeError("JWT_SECRET is required and must be set")
+    if len(secret) < 32:
+        raise RuntimeError("JWT_SECRET must be at least 32 characters")
+    if secret in WEAK_JWT_SECRETS:
+        raise RuntimeError("JWT_SECRET value is insecure")
+
+def parse_cors_origins(raw: Optional[str]) -> List[str]:
+    if not raw:
+        raise RuntimeError("CORS_ORIGINS is required")
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    if not origins:
+        raise RuntimeError("CORS_ORIGINS cannot be empty")
+    if "*" in origins:
+        raise RuntimeError("CORS wildcard '*' is not allowed when credentials are enabled")
+    return origins
+
+validate_jwt_secret(JWT_SECRET)
+CORS_ORIGINS = parse_cors_origins(os.environ.get("CORS_ORIGINS"))
+
+def redact_sensitive(text: Optional[str]) -> Optional[str]:
+    if text is None:
+        return None
+    redacted = re.sub(r'(token|password|secret|authorization)\s*[:=]\s*[^\s,;]+', r'\1=[REDACTED]', text, flags=re.IGNORECASE)
+    return redacted
+
+class RateLimiter:
+    def __init__(self):
+        self.storage: Dict[str, List[datetime]] = defaultdict(list)
+        self.redis = redis_async.from_url(REDIS_URL, decode_responses=True) if REDIS_URL else None
+
+    async def check(self, identifier: str, max_requests: int) -> bool:
+        now = datetime.now(timezone.utc)
+        if self.redis:
+            key = f"rate_limit:{identifier}"
+            now_ts = int(now.timestamp() * 1000)
+            window_start = int((now - timedelta(seconds=RATE_LIMIT_WINDOW)).timestamp() * 1000)
+            pipe = self.redis.pipeline()
+            pipe.zremrangebyscore(key, 0, window_start)
+            pipe.zcard(key)
+            pipe.zadd(key, {str(now_ts): now_ts})
+            pipe.expire(key, RATE_LIMIT_WINDOW + 5)
+            _, count, _, _ = await pipe.execute()
+            return count < max_requests
+
+        window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+        self.storage[identifier] = [ts for ts in self.storage[identifier] if ts > window_start]
+        if len(self.storage[identifier]) >= max_requests:
+            return False
+        self.storage[identifier].append(now)
+        return True
+
+class CacheBackend:
+    def __init__(self):
+        self.storage: Dict[str, Dict[str, Any]] = {}
+        self.redis = redis_async.from_url(REDIS_URL, decode_responses=True) if REDIS_URL else None
+
+    async def get(self, key: str) -> Optional[Dict]:
+        if self.redis:
+            value = await self.redis.get(f"cache:{key}")
+            return json.loads(value) if value else None
+        cached = self.storage.get(key)
+        if not cached:
+            return None
+        if datetime.now(timezone.utc) - cached['timestamp'] >= timedelta(seconds=CACHE_TTL_SECONDS):
+            self.storage.pop(key, None)
+            return None
+        return cached['data']
+
+    async def set(self, key: str, value: Dict, ttl: int = CACHE_TTL_SECONDS) -> None:
+        if self.redis:
+            await self.redis.set(f"cache:{key}", json.dumps(value), ex=ttl)
+            return
+        self.storage[key] = {'data': value, 'timestamp': datetime.now(timezone.utc)}
+
+rate_limiter = RateLimiter()
+cache_backend = CacheBackend()
 
 # ============= MODELS =============
 
@@ -320,24 +409,9 @@ class AuditLog(BaseModel):
 
 # ============= RATE LIMITING =============
 
-def check_rate_limit(identifier: str, max_requests: int = RATE_LIMIT_MAX_REQUESTS) -> bool:
+async def check_rate_limit(identifier: str, max_requests: int = RATE_LIMIT_MAX_REQUESTS) -> bool:
     """Check if request should be rate limited"""
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW)
-    
-    # Clean old entries
-    rate_limit_storage[identifier] = [
-        ts for ts in rate_limit_storage[identifier] 
-        if ts > window_start
-    ]
-    
-    # Check limit
-    if len(rate_limit_storage[identifier]) >= max_requests:
-        return False
-    
-    # Record request
-    rate_limit_storage[identifier].append(now)
-    return True
+    return await rate_limiter.check(identifier, max_requests)
 
 async def get_client_ip(request: Request) -> str:
     """Get client IP from request"""
@@ -407,7 +481,7 @@ async def log_admin_action(admin_id: str, admin_username: str, action: str,
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
-        details=details
+        details=redact_sensitive(details)
     )
     doc = log.model_dump()
     doc['timestamp'] = doc['timestamp'].isoformat()
@@ -421,10 +495,10 @@ async def fetch_chess_com_stats(username: str, use_cache: bool = True) -> Dict:
     cache_key = f"stats_{username.lower()}"
     
     # Check cache
-    if use_cache and cache_key in chess_com_cache:
-        cached = chess_com_cache[cache_key]
-        if datetime.now(timezone.utc) - cached['timestamp'] < timedelta(seconds=CACHE_TTL_SECONDS):
-            return cached['data']
+    if use_cache:
+        cached = await cache_backend.get(cache_key)
+        if cached is not None:
+            return cached
     
     async with httpx.AsyncClient(timeout=15.0) as http_client:
         try:
@@ -433,10 +507,7 @@ async def fetch_chess_com_stats(username: str, use_cache: bool = True) -> Dict:
             
             if response.status_code == 200:
                 data = response.json()
-                chess_com_cache[cache_key] = {
-                    'data': data,
-                    'timestamp': datetime.now(timezone.utc)
-                }
+                await cache_backend.set(cache_key, data)
                 return data
             elif response.status_code == 404:
                 return {"error": "Player not found on Chess.com", "status": 404}
@@ -455,10 +526,10 @@ async def fetch_chess_com_profile(username: str, use_cache: bool = True) -> Dict
     cache_key = f"profile_{username.lower()}"
     
     # Check cache
-    if use_cache and cache_key in chess_com_cache:
-        cached = chess_com_cache[cache_key]
-        if datetime.now(timezone.utc) - cached['timestamp'] < timedelta(seconds=CACHE_TTL_SECONDS):
-            return cached['data']
+    if use_cache:
+        cached = await cache_backend.get(cache_key)
+        if cached is not None:
+            return cached
     
     async with httpx.AsyncClient(timeout=15.0) as http_client:
         try:
@@ -467,10 +538,7 @@ async def fetch_chess_com_profile(username: str, use_cache: bool = True) -> Dict
             
             if response.status_code == 200:
                 data = response.json()
-                chess_com_cache[cache_key] = {
-                    'data': data,
-                    'timestamp': datetime.now(timezone.utc)
-                }
+                await cache_backend.set(cache_key, data)
                 return data
             elif response.status_code == 404:
                 return {"error": "Player not found on Chess.com", "status": 404}
@@ -491,10 +559,9 @@ async def fetch_chess_com_games(username: str, year: int = None, month: int = No
     
     cache_key = f"games_{username.lower()}_{year}_{month}"
     
-    if cache_key in chess_com_cache:
-        cached = chess_com_cache[cache_key]
-        if datetime.now(timezone.utc) - cached['timestamp'] < timedelta(seconds=CACHE_TTL_SECONDS):
-            return cached['data']
+    cached = await cache_backend.get(cache_key)
+    if cached is not None:
+        return cached
     
     async with httpx.AsyncClient(timeout=15.0) as http_client:
         try:
@@ -504,10 +571,7 @@ async def fetch_chess_com_games(username: str, year: int = None, month: int = No
             
             if response.status_code == 200:
                 data = response.json()
-                chess_com_cache[cache_key] = {
-                    'data': data,
-                    'timestamp': datetime.now(timezone.utc)
-                }
+                await cache_backend.set(cache_key, data)
                 return data
             else:
                 return {"error": f"Failed to fetch games (status {response.status_code})", "games": []}
@@ -533,6 +597,16 @@ def serialize_datetime(dt):
     if isinstance(dt, datetime):
         return dt.isoformat()
     return dt
+
+def ensure_positive_pagination(page: int, limit: int, max_limit: int = 100) -> None:
+    if page < 1:
+        raise HTTPException(status_code=400, detail="page must be >= 1")
+    if limit < 1 or limit > max_limit:
+        raise HTTPException(status_code=400, detail=f"limit must be between 1 and {max_limit}")
+
+def build_safe_regex_query(term: str) -> Dict[str, str]:
+    escaped = re.escape(term.strip())
+    return {"$regex": escaped, "$options": "i"}
 
 # ============= PUBLIC ROUTES =============
 
@@ -561,19 +635,26 @@ async def get_members(
 ):
     # Rate limiting
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"members_{client_ip}"):
+    if not await check_rate_limit(f"members_{client_ip}"):
         raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
+    ensure_positive_pagination(page, limit)
+    allowed_sort_fields = {"name", "department", "rapid_rating", "blitz_rating", "bullet_rating", "created_at", "updated_at"}
+    if sort_by not in allowed_sort_fields:
+        raise HTTPException(status_code=400, detail="Invalid sort_by field")
+    if sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=400, detail="sort_order must be 'asc' or 'desc'")
     
     # Build query
     query = {}
-    if search:
+    if search and search.strip():
+        safe_search = build_safe_regex_query(search)
         query["$or"] = [
-            {"name": {"$regex": search, "$options": "i"}},
-            {"chess_com_username": {"$regex": search, "$options": "i"}},
-            {"department": {"$regex": search, "$options": "i"}}
+            {"name": safe_search},
+            {"chess_com_username": safe_search},
+            {"department": safe_search}
         ]
-    if department:
-        query["department"] = {"$regex": department, "$options": "i"}
+    if department and department.strip():
+        query["department"] = build_safe_regex_query(department)
     
     # Count total
     total = await db.members.count_documents(query)
@@ -601,7 +682,7 @@ async def get_members(
 @api_router.get("/members/{member_id}")
 async def get_member(member_id: str, request: Request):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"member_{client_ip}"):
+    if not await check_rate_limit(f"member_{client_ip}"):
         raise HTTPException(status_code=429, detail="Too many requests")
     
     member = await db.members.find_one({"id": member_id}, {"_id": 0, "password_hash": 0})
@@ -632,8 +713,12 @@ async def get_leaderboard(
     limit: int = 50
 ):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"leaderboard_{client_ip}"):
+    if not await check_rate_limit(f"leaderboard_{client_ip}"):
         raise HTTPException(status_code=429, detail="Too many requests")
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    if time_control not in {"rapid", "blitz", "bullet"}:
+        raise HTTPException(status_code=400, detail="Invalid time_control")
     
     members = await db.members.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
     
@@ -656,7 +741,7 @@ async def get_leaderboard(
 @api_router.get("/chess-com/{username}")
 async def get_chess_com_stats_route(username: str, request: Request):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"chesscom_{client_ip}", max_requests=10):
+    if not await check_rate_limit(f"chesscom_{client_ip}", max_requests=10):
         raise HTTPException(status_code=429, detail="Too many Chess.com API requests. Please wait.")
     
     stats = await fetch_chess_com_stats(username)
@@ -683,7 +768,7 @@ async def get_chess_com_games_route(
     month: Optional[int] = None
 ):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"chesscom_games_{client_ip}", max_requests=5):
+    if not await check_rate_limit(f"chesscom_games_{client_ip}", max_requests=5):
         raise HTTPException(status_code=429, detail="Too many requests")
     
     games = await fetch_chess_com_games(username, year, month)
@@ -697,6 +782,7 @@ async def get_tournaments(
     page: int = 1,
     limit: int = 20
 ):
+    ensure_positive_pagination(page, limit)
     query = {}
     if status:
         query["status"] = status
@@ -758,6 +844,7 @@ async def get_matches(
     page: int = 1,
     limit: int = 50
 ):
+    ensure_positive_pagination(page, limit)
     query = {}
     if tournament:
         query["tournament_name"] = tournament
@@ -783,6 +870,7 @@ async def get_matches(
 # News - Public Read
 @api_router.get("/news")
 async def get_news(page: int = 1, limit: int = 10):
+    ensure_positive_pagination(page, limit)
     total = await db.news.count_documents({})
     skip = (page - 1) * limit
     
@@ -813,6 +901,7 @@ async def get_events(
     page: int = 1,
     limit: int = 20
 ):
+    ensure_positive_pagination(page, limit)
     query = {}
     if upcoming_only:
         query["date"] = {"$gte": datetime.now(timezone.utc).isoformat()}
@@ -894,6 +983,7 @@ async def get_gallery(
     page: int = 1,
     limit: int = 20
 ):
+    ensure_positive_pagination(page, limit)
     query = {}
     if event_id:
         query["event_id"] = event_id
@@ -994,7 +1084,7 @@ async def get_club_statistics():
 async def register_member(data: MemberRegister, request: Request):
     """Register a new member account"""
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"member_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
+    if not await check_rate_limit(f"member_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
         raise HTTPException(status_code=429, detail="Too many registration attempts. Please wait a minute and try again.")
     
     # Check if email already exists
@@ -1064,7 +1154,7 @@ async def register_member(data: MemberRegister, request: Request):
 async def login_member(data: MemberLogin, request: Request):
     """Login for members"""
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"member_login_{client_ip}", max_requests=LOGIN_RATE_LIMIT):
+    if not await check_rate_limit(f"member_login_{client_ip}", max_requests=LOGIN_RATE_LIMIT):
         raise HTTPException(status_code=429, detail="Too many login attempts. Please wait.")
     
     member = await db.members.find_one({"email": data.email, "has_account": True})
@@ -1134,8 +1224,13 @@ async def update_current_member(data: MemberUpdate, payload: dict = Depends(veri
 
 @api_router.post("/admin/register")
 async def register_admin(admin_data: AdminCreate, request: Request):
+    if not ALLOW_ADMIN_BOOTSTRAP:
+        raise HTTPException(status_code=403, detail="Admin bootstrap is disabled")
+    bootstrap_token = request.headers.get("X-Admin-Bootstrap-Token")
+    if not ADMIN_BOOTSTRAP_TOKEN or not bootstrap_token or bootstrap_token != ADMIN_BOOTSTRAP_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid bootstrap token")
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"admin_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
+    if not await check_rate_limit(f"admin_register_{client_ip}", max_requests=REGISTER_RATE_LIMIT):
         raise HTTPException(status_code=429, detail="Too many registration attempts. Please wait a minute and try again.")
     
     # Check if admin exists
@@ -1158,14 +1253,14 @@ async def register_admin(admin_data: AdminCreate, request: Request):
     await db.admins.insert_one(doc)
     
     # Log action
-    await log_admin_action(admin.id, admin.username, "create", "admin", admin.id, "Self-registration")
+    await log_admin_action(admin.id, admin.username, "create", "admin", admin.id, "Bootstrap registration")
     
     return {"message": "Admin registered successfully", "admin_id": admin.id}
 
 @api_router.post("/admin/login")
 async def login_admin(login_data: AdminLogin, request: Request):
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"admin_login_{client_ip}", max_requests=LOGIN_RATE_LIMIT):
+    if not await check_rate_limit(f"admin_login_{client_ip}", max_requests=LOGIN_RATE_LIMIT):
         raise HTTPException(status_code=429, detail="Too many login attempts. Please wait 1 minute.")
     
     admin = await db.admins.find_one({"username": login_data.username.lower()})
@@ -1190,7 +1285,7 @@ async def login_admin(login_data: AdminLogin, request: Request):
 async def request_password_reset(data: PasswordResetRequest, request: Request):
     """Request password reset - generates a token"""
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"password_reset_{client_ip}", max_requests=3):
+    if not await check_rate_limit(f"password_reset_{client_ip}", max_requests=3):
         raise HTTPException(status_code=429, detail="Too many requests")
     
     admin = await db.admins.find_one({"email": data.email})
@@ -1212,18 +1307,15 @@ async def request_password_reset(data: PasswordResetRequest, request: Request):
     
     # In production, send email with reset link
     # For now, return the token (only for development)
-    logger.info(f"Password reset requested for {data.email}. Token: {reset_token}")
+    logger.info(f"Password reset requested for {data.email}.")
     
-    return {
-        "message": "If the email exists, a reset link will be sent.",
-        "dev_token": reset_token  # Remove in production!
-    }
+    return {"message": "If the email exists, a reset link will be sent."}
 
 @api_router.post("/admin/password-reset")
 async def reset_password(data: PasswordReset, request: Request):
     """Reset password using token"""
     client_ip = await get_client_ip(request)
-    if not check_rate_limit(f"password_reset_confirm_{client_ip}", max_requests=5):
+    if not await check_rate_limit(f"password_reset_confirm_{client_ip}", max_requests=5):
         raise HTTPException(status_code=429, detail="Too many requests")
     
     reset = await db.password_resets.find_one({
@@ -1353,6 +1445,21 @@ async def delete_member(member_id: str, payload: dict = Depends(verify_admin_tok
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
     
+    # Delete dependent matches and clean tournament participant lists before deleting member
+    member_matches = await db.matches.find({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]}, {"_id": 0}).to_list(2000)
+    for match in member_matches:
+        if match['result'] == "1-0":
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"wins": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"losses": -1}})
+        elif match['result'] == "0-1":
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"losses": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"wins": -1}})
+        else:
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"draws": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"draws": -1}})
+    await db.matches.delete_many({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]})
+    await db.tournaments.update_many({"participants": member_id}, {"$pull": {"participants": member_id}})
+
     result = await db.members.delete_one({"id": member_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -1531,6 +1638,20 @@ async def delete_tournament(tournament_id: str, payload: dict = Depends(verify_a
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
     
+    # Remove related matches from this tournament and rollback per-member stats
+    tournament_matches = await db.matches.find({"tournament_name": tournament.get('name')}, {"_id": 0}).to_list(2000)
+    for match in tournament_matches:
+        if match['result'] == "1-0":
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"wins": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"losses": -1}})
+        elif match['result'] == "0-1":
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"losses": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"wins": -1}})
+        else:
+            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"draws": -1}})
+            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"draws": -1}})
+    await db.matches.delete_many({"tournament_name": tournament.get('name')})
+
     result = await db.tournaments.delete_one({"id": tournament_id})
     
     # Log action
@@ -1718,6 +1839,7 @@ async def get_audit_logs(
     limit: int = 50,
     resource_type: Optional[str] = None
 ):
+    ensure_positive_pagination(page, limit)
     query = {}
     if resource_type:
         query["resource_type"] = resource_type
@@ -1741,7 +1863,7 @@ async def get_audit_logs(
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

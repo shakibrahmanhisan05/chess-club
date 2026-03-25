@@ -72,8 +72,11 @@ async function request(url, options = {}, retries = 0) {
 
       // Handle rate limiting with retry
       if (status === 429 && retries < MAX_RETRIES) {
-        const retryAfter = parseInt(res.headers.get('Retry-After')) || RETRY_DELAY * (retries + 1);
-        await sleep(retryAfter);
+        const retryAfterHeader = parseInt(res.headers.get('Retry-After'));
+        const retryAfterMs = Number.isFinite(retryAfterHeader)
+          ? retryAfterHeader * 1000
+          : RETRY_DELAY * (retries + 1);
+        await sleep(retryAfterMs);
         return request(url, options, retries + 1);
       }
 

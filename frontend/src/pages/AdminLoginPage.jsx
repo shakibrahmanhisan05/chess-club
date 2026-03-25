@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Crown, Lock, User, Eye, EyeOff, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Crown, Lock, User, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
-
-// Two-step verification code
-const VERIFICATION_CODE = '496149';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -19,11 +16,6 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Two-step verification state
-  const [verificationStep, setVerificationStep] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [pendingLoginData, setPendingLoginData] = useState(null);
   
   const [formData, setFormData] = useState({
     username: '',
@@ -46,11 +38,9 @@ export default function AdminLoginPage() {
     try {
       if (mode === 'login') {
         const response = await api.login(formData.username, formData.password);
-        // Store login data and show verification step
-        setPendingLoginData({ token: response.token, admin: response.admin });
-        setVerificationStep(true);
-        setLoading(false);
-        toast.info('Please enter the verification code to continue.');
+        login(response.token, response.admin);
+        toast.success('Login successful! Welcome back.');
+        navigate('/admin/dashboard');
         return;
       } else {
         await api.register(formData.username, formData.password, formData.email);
@@ -64,35 +54,6 @@ export default function AdminLoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleVerificationSubmit = (e) => {
-    e.preventDefault();
-    setError('');
-    
-    if (verificationCode === VERIFICATION_CODE) {
-      // Verification successful - complete login
-      login(pendingLoginData.token, pendingLoginData.admin);
-      toast.success('Verification successful! Welcome back!');
-      navigate('/admin/dashboard');
-    } else {
-      // Verification failed - redirect to homepage
-      toast.error('Invalid verification code. Redirecting to homepage...');
-      setVerificationStep(false);
-      setPendingLoginData(null);
-      setVerificationCode('');
-      setFormData({ username: '', password: '', email: '' });
-      setTimeout(() => {
-        navigate('/');
-      }, 1500);
-    }
-  };
-
-  const handleCancelVerification = () => {
-    setVerificationStep(false);
-    setPendingLoginData(null);
-    setVerificationCode('');
-    setError('');
   };
 
   return (
@@ -115,80 +76,7 @@ export default function AdminLoginPage() {
 
         {/* Form Card */}
         <div className="glass-card rounded-2xl p-8">
-          {/* Verification Step */}
-          {verificationStep ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {/* Verification Header */}
-              <div className="text-center mb-6">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mx-auto mb-4">
-                  <ShieldCheck className="w-7 h-7 text-white" />
-                </div>
-                <h2 className="text-xl font-semibold text-white">Two-Step Verification</h2>
-                <p className="text-neutral-400 text-sm mt-2">
-                  Please enter the verification code to complete login
-                </p>
-              </div>
-
-              {/* Error Message */}
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm mb-6"
-                >
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{error}</span>
-                </motion.div>
-              )}
-
-              <form onSubmit={handleVerificationSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="verificationCode" className="text-neutral-300">Verification Code</Label>
-                  <div className="relative">
-                    <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
-                    <Input
-                      id="verificationCode"
-                      type="text"
-                      placeholder="Enter 6-digit code"
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value)}
-                      className="pl-10 bg-white/5 border-white/10 focus:border-violet-500 text-center text-lg tracking-widest"
-                      maxLength={6}
-                      required
-                      autoFocus
-                      data-testid="verification-code-input"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full btn-primary"
-                  data-testid="verify-btn"
-                >
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4" />
-                    Verify & Login
-                  </div>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCancelVerification}
-                  className="w-full border-white/20 text-neutral-400 hover:text-white"
-                  data-testid="cancel-verification-btn"
-                >
-                  Cancel
-                </Button>
-              </form>
-            </motion.div>
-          ) : (
-            <>
+          <>
               {/* Mode Toggle */}
               <div className="flex rounded-full bg-white/5 p-1 mb-8">
                 <button
@@ -317,8 +205,7 @@ export default function AdminLoginPage() {
                   ← Back to Home
                 </a>
               </div>
-            </>
-          )}
+          </>
         </div>
       </motion.div>
     </div>
