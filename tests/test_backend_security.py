@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 
-REPO_ROOT = Path("/home/runner/work/chess-club/chess-club")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_PATH = REPO_ROOT / "backend" / "server.py"
 
 

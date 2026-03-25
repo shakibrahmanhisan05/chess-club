@@ -608,6 +608,28 @@ def build_safe_regex_query(term: str) -> Dict[str, str]:
     escaped = re.escape(term.strip())
     return {"$regex": escaped, "$options": "i"}
 
+def _stats_delta_for_result(result: str) -> Dict[str, Dict[str, int]]:
+    if result == "1-0":
+        return {"p1": {"wins": -1}, "p2": {"losses": -1}}
+    if result == "0-1":
+        return {"p1": {"losses": -1}, "p2": {"wins": -1}}
+    return {"p1": {"draws": -1}, "p2": {"draws": -1}}
+
+async def _rollback_matches_stats(matches: List[Dict[str, Any]]) -> None:
+    per_member: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for match in matches:
+        delta = _stats_delta_for_result(match.get("result"))
+        p1 = match.get("player1_id")
+        p2 = match.get("player2_id")
+        if p1:
+            for k, v in delta["p1"].items():
+                per_member[p1][k] += v
+        if p2:
+            for k, v in delta["p2"].items():
+                per_member[p2][k] += v
+    for member_id, member_delta in per_member.items():
+        await db.members.update_one({"id": member_id}, {"$inc": dict(member_delta)})
+
 # ============= PUBLIC ROUTES =============
 
 @api_router.get("/")
@@ -1447,16 +1469,7 @@ async def delete_member(member_id: str, payload: dict = Depends(verify_admin_tok
     
     # Delete dependent matches and clean tournament participant lists before deleting member
     member_matches = await db.matches.find({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]}, {"_id": 0}).to_list(2000)
-    for match in member_matches:
-        if match['result'] == "1-0":
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"wins": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"losses": -1}})
-        elif match['result'] == "0-1":
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"losses": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"wins": -1}})
-        else:
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"draws": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"draws": -1}})
+    await _rollback_matches_stats(member_matches)
     await db.matches.delete_many({"$or": [{"player1_id": member_id}, {"player2_id": member_id}]})
     await db.tournaments.update_many({"participants": member_id}, {"$pull": {"participants": member_id}})
 
@@ -1640,16 +1653,7 @@ async def delete_tournament(tournament_id: str, payload: dict = Depends(verify_a
     
     # Remove related matches from this tournament and rollback per-member stats
     tournament_matches = await db.matches.find({"tournament_name": tournament.get('name')}, {"_id": 0}).to_list(2000)
-    for match in tournament_matches:
-        if match['result'] == "1-0":
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"wins": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"losses": -1}})
-        elif match['result'] == "0-1":
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"losses": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"wins": -1}})
-        else:
-            await db.members.update_one({"id": match['player1_id']}, {"$inc": {"draws": -1}})
-            await db.members.update_one({"id": match['player2_id']}, {"$inc": {"draws": -1}})
+    await _rollback_matches_stats(tournament_matches)
     await db.matches.delete_many({"tournament_name": tournament.get('name')})
 
     result = await db.tournaments.delete_one({"id": tournament_id})
