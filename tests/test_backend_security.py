@@ -60,6 +60,7 @@ def test_admin_register_disabled_without_bootstrap():
 def test_password_reset_response_has_no_token():
     set_required_env()
     module = load_server_module("server_test_password_reset")
+    module.db = type("DB", (), {"admins": FakeCollection(find_one_result=None)})()
     client = TestClient(module.app)
     res = client.post("/api/admin/password-reset-request", json={"email": "nobody@example.com"})
     assert res.status_code == 200
